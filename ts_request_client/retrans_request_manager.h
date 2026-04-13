@@ -34,6 +34,8 @@ public:
 
     void OnMissingRange(uint64_t start_seq, uint16_t count) {
         std::lock_guard<std::mutex> lock(mutex_);
+        requested_ranges_++;
+        requested_packets_ += count;
 
         const auto now = Clock::now();
 
@@ -59,6 +61,7 @@ public:
         auto it = missing_map_.find(seq);
         if (it != missing_map_.end()) {
             it->second.recovered = true;
+            recovered_packets_++;
         }
     }
 
@@ -91,8 +94,20 @@ public:
                 SendRequestUnlocked(info.seq, 1);
                 info.last_request_time = now;
                 ++info.retry_count;
+                retry_requests_++;
             }
         }
+    }
+
+    void PrintStats() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::cout << "[RetransRequest][STAT] "
+                  << "requested_ranges=" << requested_ranges_
+                  << " requested_packets=" << requested_packets_
+                  << " retry_requests=" << retry_requests_
+                  << " recovered_packets=" << recovered_packets_
+                  << " inflight_missing=" << missing_map_.size()
+                  << std::endl;
     }
 
     void Cleanup() {
@@ -111,14 +126,14 @@ private:
         uint8_t send_buf[sizeof(RetransHeader) + sizeof(RetransRequestBody)] = {0};
 
         auto* hdr = reinterpret_cast<RetransHeader*>(send_buf);
-        hdr->magic = RETRANS_MAGIC;
-        hdr->msg_type = static_cast<uint16_t>(RetransMsgType::REQUEST);
-        hdr->body_len = sizeof(RetransRequestBody);
+        hdr->magic = htons(RETRANS_MAGIC);
+        hdr->msg_type = htons(static_cast<uint16_t>(RetransMsgType::REQUEST));
+        hdr->body_len = htons(sizeof(RetransRequestBody));
         hdr->reserved = 0;
 
         auto* body = reinterpret_cast<RetransRequestBody*>(send_buf + sizeof(RetransHeader));
-        body->start_seq = start_seq;
-        body->count = count;
+        body->start_seq = HostToNet64(start_seq);
+        body->count = htons(count);
 
         ::sendto(req_sock_,
                  send_buf,
@@ -141,4 +156,9 @@ private:
     std::chrono::milliseconds retry_interval_{30};
     std::chrono::milliseconds total_timeout_{60};
     int max_retry_count_ = 2; // 第一次 + 重试一次
+
+    uint64_t requested_ranges_ = 0;
+    uint64_t requested_packets_ = 0;
+    uint64_t retry_requests_ = 0;
+    uint64_t recovered_packets_ = 0;
 };

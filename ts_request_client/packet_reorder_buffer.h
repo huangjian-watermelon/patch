@@ -48,7 +48,7 @@ public:
 
         std::memset(&deliver_addr_, 0, sizeof(deliver_addr_));
         deliver_addr_.sin_family = AF_INET;
-        deliver_addr_.sin_port = port;
+        deliver_addr_.sin_port = htons(port);
 
         if (::inet_pton(AF_INET, ip.c_str(), &deliver_addr_.sin_addr) != 1)
         {
