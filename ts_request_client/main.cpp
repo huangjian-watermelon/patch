@@ -5,6 +5,8 @@
 #include <thread>
 #include <chrono>
 #include <string>
+#include <fstream>
+#include <regex>
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -31,42 +33,59 @@ struct ClientConfig
     uint16_t output_mcast_port = 1234;
 };
 
-uint16_t ToU16(const std::string& s)
+bool ReadFile(const std::string& path, std::string& content)
 {
-    return static_cast<uint16_t>(std::stoi(s));
+    std::ifstream ifs(path);
+    if (!ifs.is_open())
+    {
+        return false;
+    }
+    content.assign((std::istreambuf_iterator<char>(ifs)),
+                   std::istreambuf_iterator<char>());
+    return true;
 }
 
-bool ParseArgs(int argc, char* argv[], ClientConfig& cfg)
+bool GetString(const std::string& json, const std::string& key, std::string& out)
 {
-    for (int i = 1; i < argc; ++i)
+    const std::regex re("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
+    std::smatch m;
+    if (!std::regex_search(json, m, re) || m.size() < 2)
     {
-        const std::string arg = argv[i];
-        if (arg == "--stream-mcast-ip" && i + 1 < argc) cfg.stream_mcast_ip = argv[++i];
-        else if (arg == "--stream-port" && i + 1 < argc) cfg.stream_port = ToU16(argv[++i]);
-        else if (arg == "--server-ip" && i + 1 < argc) cfg.server_ip = argv[++i];
-        else if (arg == "--retrans-request-port" && i + 1 < argc) cfg.retrans_request_port = ToU16(argv[++i]);
-        else if (arg == "--retrans-recv-port" && i + 1 < argc) cfg.retrans_recv_port = ToU16(argv[++i]);
-        else if (arg == "--output-mcast-ip" && i + 1 < argc) cfg.output_mcast_ip = argv[++i];
-        else if (arg == "--output-mcast-port" && i + 1 < argc) cfg.output_mcast_port = ToU16(argv[++i]);
-        else if (arg == "--help")
-        {
-            std::cout
-                << "Usage: ts_request_client [options]\n"
-                << "  --stream-mcast-ip <ip>\n"
-                << "  --stream-port <port>\n"
-                << "  --server-ip <ip>\n"
-                << "  --retrans-request-port <port>\n"
-                << "  --retrans-recv-port <port>\n"
-                << "  --output-mcast-ip <ip>\n"
-                << "  --output-mcast-port <port>\n";
-            return false;
-        }
-        else
-        {
-            std::cerr << "Unknown arg: " << arg << "\n";
-            return false;
-        }
+        return false;
     }
+    out = m[1].str();
+    return true;
+}
+
+bool GetU16(const std::string& json, const std::string& key, uint16_t& out)
+{
+    const std::regex re("\"" + key + "\"\\s*:\\s*(\\d+)");
+    std::smatch m;
+    if (!std::regex_search(json, m, re) || m.size() < 2)
+    {
+        return false;
+    }
+    out = static_cast<uint16_t>(std::stoi(m[1].str()));
+    return true;
+}
+
+bool LoadConfig(const std::string& path, ClientConfig& cfg)
+{
+    std::string json;
+    if (!ReadFile(path, json))
+    {
+        std::cerr << "Failed to open config file: " << path << "\n";
+        return false;
+    }
+
+    GetString(json, "stream_mcast_ip", cfg.stream_mcast_ip);
+    GetU16(json, "stream_port", cfg.stream_port);
+    GetString(json, "server_ip", cfg.server_ip);
+    GetU16(json, "retrans_request_port", cfg.retrans_request_port);
+    GetU16(json, "retrans_recv_port", cfg.retrans_recv_port);
+    GetString(json, "output_mcast_ip", cfg.output_mcast_ip);
+    GetU16(json, "output_mcast_port", cfg.output_mcast_port);
+
     return true;
 }
 }
@@ -190,8 +209,10 @@ void StatLoop()
 int main(int argc, char* argv[])
 {
     ClientConfig cfg;
-    if (!ParseArgs(argc, argv, cfg))
+    const std::string config_path = (argc >= 2) ? argv[1] : "ts_request_client.json";
+    if (!LoadConfig(config_path, cfg))
     {
+        std::cerr << "Usage: ts_request_client <config.json>\n";
         return 1;
     }
 
