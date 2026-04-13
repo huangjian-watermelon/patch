@@ -16,12 +16,10 @@ namespace
 {
     constexpr size_t kRecvBufSize = 1500;
     constexpr size_t kTsPacketSize = 188;
-
-    constexpr uint16_t RETRANS_SEND_PORT = 9001; // 收补包，建议单独端口
 }
 
-RetransServer::RetransServer(TsRingBuffer& ring_buffer)
-    : ring_buffer_(ring_buffer)
+RetransServer::RetransServer(TsRingBuffer& ring_buffer, uint16_t retrans_send_port)
+    : ring_buffer_(ring_buffer), retrans_send_port_(retrans_send_port)
 {
 }
 
@@ -155,49 +153,61 @@ void RetransServer::HandleRequest(const uint8_t* data,
 {
     if (data == nullptr)
     {
+        ++invalid_requests_;
         return;
     }
 
     if (len < sizeof(RetransHeader) + sizeof(RetransRequestBody))
     {
+        ++invalid_requests_;
         std::cerr << "[RetransServer] invalid request len=" << len << std::endl;
         return;
     }
 
     const auto* header = reinterpret_cast<const RetransHeader*>(data);
+    const uint16_t magic = ntohs(header->magic);
+    const uint16_t msg_type = ntohs(header->msg_type);
+    const uint16_t body_len = ntohs(header->body_len);
 
-    if (header->magic != RETRANS_MAGIC)
+    if (magic != RETRANS_MAGIC)
     {
+        ++invalid_requests_;
         std::cerr << "[RetransServer] invalid magic=0x"
-                  << std::hex << header->magic << std::dec << std::endl;
+                  << std::hex << magic << std::dec << std::endl;
         return;
     }
 
-    if (header->msg_type != static_cast<uint16_t>(RetransMsgType::REQUEST))
+    if (msg_type != static_cast<uint16_t>(RetransMsgType::REQUEST))
     {
+        ++invalid_requests_;
         std::cerr << "[RetransServer] invalid msg_type="
-                  << header->msg_type << std::endl;
+                  << msg_type << std::endl;
         return;
     }
 
-    if (header->body_len != sizeof(RetransRequestBody))
+    if (body_len != sizeof(RetransRequestBody))
     {
+        ++invalid_requests_;
         std::cerr << "[RetransServer] invalid body_len="
-                  << header->body_len << std::endl;
+                  << body_len << std::endl;
         return;
     }
 
     const auto* req =
         reinterpret_cast<const RetransRequestBody*>(data + sizeof(RetransHeader));
 
-    const uint64_t start_seq = req->start_seq;
-    const uint16_t count = req->count;
+    const uint64_t start_seq = NetToHost64(req->start_seq);
+    const uint16_t count = ntohs(req->count);
 
     if (count == 0)
     {
+        ++invalid_requests_;
         std::cerr << "[RetransServer] request count=0, ignore" << std::endl;
         return;
     }
+
+    ++recv_requests_;
+    requested_packets_ += count;
 
     char client_ip[INET_ADDRSTRLEN] = {0};
     ::inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
@@ -214,6 +224,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
         TsPacket packet;
         if (!ring_buffer_.GetBySeq(seq, packet))
         {
+            ++miss_packets_;
             std::cout << "[RetransServer] seq not found, seq="
                       << seq << std::endl;
             continue;
@@ -241,7 +252,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
         std::memcpy(pkt.ts_data, packet.data, kTsPacketSize);
 
         sockaddr_in client_send_addr = client_addr;
-        client_send_addr.sin_port = htons(RETRANS_SEND_PORT);
+        client_send_addr.sin_port = htons(retrans_send_port_);
         const ssize_t sent = ::sendto(send_sockfd_,
                                       &pkt,
                                       sizeof(pkt),
@@ -256,7 +267,20 @@ void RetransServer::HandleRequest(const uint8_t* data,
             continue;
         }
 
+        ++resent_packets_;
         std::cout << "[RetransServer] resend ok, seq=" << seq
                   << " bytes=" << sent << std::endl;
+    }
+
+    static uint64_t request_print_count = 0;
+    ++request_print_count;
+    if ((request_print_count % 100) == 0)
+    {
+        std::cout << "[RetransServer][STAT] recv_requests=" << recv_requests_
+                  << " invalid_requests=" << invalid_requests_
+                  << " requested_packets=" << requested_packets_
+                  << " resent_packets=" << resent_packets_
+                  << " ring_miss_packets=" << miss_packets_
+                  << std::endl;
     }
 }
