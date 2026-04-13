@@ -140,6 +140,12 @@ void RetransServer::Stop()
         ::close(sockfd_);
         sockfd_ = -1;
     }
+
+    if (send_sockfd_ >= 0)
+    {
+        ::close(send_sockfd_);
+        send_sockfd_ = -1;
+    }
 }
 
 void RetransServer::HandleRequest(const uint8_t* data,
