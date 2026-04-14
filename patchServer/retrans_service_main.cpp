@@ -1,9 +1,8 @@
-#include <fstream>
 #include <iostream>
-#include <regex>
 #include <string>
 #include <thread>
 
+#include "../shared/json_config.h"
 #include "retrans_server.h"
 #include "ts_ring_buffer.h"
 #include "udp_ts_receive.h"
@@ -21,68 +20,22 @@ struct RetransServiceConfig
     size_t ring_capacity = 100 * 1024;
 };
 
-bool ReadFile(const std::string& path, std::string& content)
-{
-    std::ifstream ifs(path);
-    if (!ifs.is_open())
-    {
-        return false;
-    }
-    content.assign((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    return true;
-}
-
-bool GetString(const std::string& json, const std::string& key, std::string& out)
-{
-    const std::regex re("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-    std::smatch m;
-    if (!std::regex_search(json, m, re) || m.size() < 2)
-    {
-        return false;
-    }
-    out = m[1].str();
-    return true;
-}
-
-bool GetU16(const std::string& json, const std::string& key, uint16_t& out)
-{
-    const std::regex re("\"" + key + "\"\\s*:\\s*(\\d+)");
-    std::smatch m;
-    if (!std::regex_search(json, m, re) || m.size() < 2)
-    {
-        return false;
-    }
-    out = static_cast<uint16_t>(std::stoi(m[1].str()));
-    return true;
-}
-
-bool GetSize(const std::string& json, const std::string& key, size_t& out)
-{
-    const std::regex re("\"" + key + "\"\\s*:\\s*(\\d+)");
-    std::smatch m;
-    if (!std::regex_search(json, m, re) || m.size() < 2)
-    {
-        return false;
-    }
-    out = static_cast<size_t>(std::stoull(m[1].str()));
-    return true;
-}
-
 bool LoadConfig(const std::string& path, RetransServiceConfig& cfg)
 {
-    std::string json;
-    if (!ReadFile(path, json))
+    JsonConfig json;
+    std::string err;
+    if (!JsonConfig::LoadFromFile(path, json, err))
     {
-        std::cerr << "Failed to open config file: " << path << "\n";
+        std::cerr << "Load config failed: " << err << "\n";
         return false;
     }
 
-    GetString(json, "input_mcast_ip", cfg.input_mcast_ip);
-    GetU16(json, "input_mcast_port", cfg.input_mcast_port);
-    GetString(json, "req_bind_ip", cfg.req_bind_ip);
-    GetU16(json, "req_bind_port", cfg.req_bind_port);
-    GetU16(json, "retrans_send_port", cfg.retrans_send_port);
-    GetSize(json, "ring_capacity", cfg.ring_capacity);
+    json.GetString("input_mcast_ip", cfg.input_mcast_ip);
+    json.GetUInt16("input_mcast_port", cfg.input_mcast_port);
+    json.GetString("req_bind_ip", cfg.req_bind_ip);
+    json.GetUInt16("req_bind_port", cfg.req_bind_port);
+    json.GetUInt16("retrans_send_port", cfg.retrans_send_port);
+    json.GetSize("ring_capacity", cfg.ring_capacity);
     return true;
 }
 }

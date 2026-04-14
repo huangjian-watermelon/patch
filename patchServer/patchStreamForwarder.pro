@@ -5,6 +5,7 @@ CONFIG -= qt
 TARGET = patchStreamForwarder
 
 SOURCES += \
+    ../shared/json_config.cpp \
     stream_forwarder_main.cpp \
     ts_loss_detector.cpp \
     ts_ring_buffer.cpp \

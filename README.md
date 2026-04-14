@@ -8,6 +8,8 @@
 - 补包程序默认读取 `retrans_service.json`
 - 客户端默认读取 `ts_request_client.json`
 
+配置解析已统一使用共享 JSON 解析模块（`shared/json_config.*`），不再使用正则抽取字段。
+
 也可以手动指定配置文件路径：
 
 ```bash
