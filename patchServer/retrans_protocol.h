@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <arpa/inet.h>
 
 static constexpr uint16_t RETRANS_MAGIC = 0x5254;
 
@@ -32,3 +33,17 @@ struct RetransResponseBody
 };
 
 #pragma pack(pop)
+
+inline uint64_t HostToNet64(uint64_t v)
+{
+    const uint32_t hi = htonl(static_cast<uint32_t>(v >> 32));
+    const uint32_t lo = htonl(static_cast<uint32_t>(v & 0xFFFFFFFFULL));
+    return (static_cast<uint64_t>(lo) << 32) | hi;
+}
+
+inline uint64_t NetToHost64(uint64_t v)
+{
+    const uint32_t hi = ntohl(static_cast<uint32_t>(v >> 32));
+    const uint32_t lo = ntohl(static_cast<uint32_t>(v & 0xFFFFFFFFULL));
+    return (static_cast<uint64_t>(lo) << 32) | hi;
+}

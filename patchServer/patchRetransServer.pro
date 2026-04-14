@@ -2,10 +2,10 @@ TEMPLATE = app
 CONFIG += console c++11 thread
 CONFIG -= app_bundle
 CONFIG -= qt
-TARGET = patchServer
+TARGET = patchRetransServer
 
 SOURCES += \
-    main.cpp \
+    retrans_service_main.cpp \
     ts_loss_detector.cpp \
     ts_ring_buffer.cpp \
     udp_ts_receive.cpp \

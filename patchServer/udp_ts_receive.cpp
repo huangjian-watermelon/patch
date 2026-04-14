@@ -1,5 +1,4 @@
 #include "udp_ts_receive.h"
-#include "ts_loss_detector.h"
 #include "ts_parsed_header.h"
 #include "stream_packet.h"
 
@@ -129,6 +128,12 @@ void UdpTsReceiver::Stop()
         ::close(sockfd_);
         sockfd_ = -1;
     }
+
+    if (sendsockfd_ >= 0)
+    {
+        ::close(sendsockfd_);
+        sendsockfd_ = -1;
+    }
 }
 
 void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
@@ -154,11 +159,10 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
         packet.recv_time_us = GetNowUs();
         std::memcpy(packet.data, data + offset, TS_PACKET_SIZE);
 
-        TsLossDetector loss_detector;
         TsParsedHeader header;
         if (ParseTsHeader(packet.data, header))
         {
-            loss_detector.OnPacket(packet.seq, header);
+            loss_detector_.OnPacket(packet.seq, header);
         }
         else
         {
@@ -168,7 +172,7 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
         static auto last_print_time = GetNowMs();
         if (GetNowMs() - last_print_time >= 10000)
         {
-            loss_detector.PrintStats();
+            loss_detector_.PrintStats();
             last_print_time = GetNowMs();
         }
 
