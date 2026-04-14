@@ -4,8 +4,8 @@ set -euo pipefail
 # 用法:
 #   tools/run_chaos_test.sh [seconds]
 # 依赖:
-#   - patchServer / tsRequestClient 二进制可执行
-#   - patch_server.json / ts_request_client.json 配置存在
+#   - patchStreamForwarder / patchRetransServer / tsRequestClient 二进制可执行
+#   - stream_forwarder.json / retrans_service.json / ts_request_client.json 配置存在
 # 结果:
 #   - logs/server.log logs/client.log
 #   - logs/kpi_report.json
@@ -15,13 +15,20 @@ LOG_DIR="logs"
 mkdir -p "${LOG_DIR}"
 
 SERVER_LOG="${LOG_DIR}/server.log"
+FORWARDER_LOG="${LOG_DIR}/forwarder.log"
 CLIENT_LOG="${LOG_DIR}/client.log"
 
 : > "${SERVER_LOG}"
+: > "${FORWARDER_LOG}"
 : > "${CLIENT_LOG}"
 
-./patchServer patch_server.json >"${SERVER_LOG}" 2>&1 &
-SERVER_PID=$!
+./patchRetransServer retrans_service.json >"${SERVER_LOG}" 2>&1 &
+RETRANS_PID=$!
+
+sleep 1
+
+./patchStreamForwarder stream_forwarder.json >"${FORWARDER_LOG}" 2>&1 &
+FORWARDER_PID=$!
 
 sleep 1
 
@@ -30,9 +37,11 @@ CLIENT_PID=$!
 
 cleanup() {
   kill "${CLIENT_PID}" >/dev/null 2>&1 || true
-  kill "${SERVER_PID}" >/dev/null 2>&1 || true
+  kill "${FORWARDER_PID}" >/dev/null 2>&1 || true
+  kill "${RETRANS_PID}" >/dev/null 2>&1 || true
   wait "${CLIENT_PID}" >/dev/null 2>&1 || true
-  wait "${SERVER_PID}" >/dev/null 2>&1 || true
+  wait "${FORWARDER_PID}" >/dev/null 2>&1 || true
+  wait "${RETRANS_PID}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
