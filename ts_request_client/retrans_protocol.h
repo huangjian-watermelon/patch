@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 
 static constexpr uint16_t RETRANS_MAGIC = 0x5254;
+static constexpr uint8_t RETRANS_VERSION = 1;
 
 enum class RetransMsgType : uint16_t
 {
@@ -15,9 +16,11 @@ enum class RetransMsgType : uint16_t
 struct RetransHeader
 {
     uint16_t magic;
+    uint8_t version;
+    uint8_t reserved0;
     uint16_t msg_type;
     uint16_t body_len;
-    uint16_t reserved;
+    uint32_t request_id;
 };
 
 struct RetransRequestBody

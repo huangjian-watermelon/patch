@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <algorithm>
 
 void RetransRequestManager::Init(int req_sock, const sockaddr_in& server_addr)
 {
@@ -17,6 +18,7 @@ void RetransRequestManager::OnMissingRange(uint64_t start_seq, uint16_t count)
 
     const auto now = Clock::now();
 
+    bool has_new_missing = false;
     for (uint64_t seq = start_seq; seq < start_seq + count; ++seq)
     {
         auto it = missing_map_.find(seq);
@@ -31,8 +33,12 @@ void RetransRequestManager::OnMissingRange(uint64_t start_seq, uint16_t count)
         info.last_request_time = now;
         info.retry_count = 1;
         missing_map_[seq] = info;
+        has_new_missing = true;
+    }
 
-        SendRequestUnlocked(seq, 1);
+    if (has_new_missing)
+    {
+        SendRequestUnlocked(start_seq, count, NextRequestId());
     }
 }
 
@@ -51,6 +57,7 @@ void RetransRequestManager::CheckTimeouts(std::vector<uint64_t>& expired_seqs)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto now = Clock::now();
+    std::vector<uint64_t> retry_seqs;
 
     for (auto& kv : missing_map_)
     {
@@ -76,10 +83,47 @@ void RetransRequestManager::CheckTimeouts(std::vector<uint64_t>& expired_seqs)
 
         if (retry_elapsed >= retry_interval_ && info.retry_count < max_retry_count_)
         {
-            SendRequestUnlocked(info.seq, 1);
             info.last_request_time = now;
             ++info.retry_count;
             retry_requests_++;
+            retry_seqs.push_back(info.seq);
+        }
+    }
+
+    if (retry_seqs.empty())
+    {
+        return;
+    }
+
+    std::sort(retry_seqs.begin(), retry_seqs.end());
+    retry_seqs.erase(std::unique(retry_seqs.begin(), retry_seqs.end()), retry_seqs.end());
+
+    uint64_t start = retry_seqs[0];
+    uint64_t prev = retry_seqs[0];
+    for (size_t i = 1; i <= retry_seqs.size(); ++i)
+    {
+        const bool end = (i == retry_seqs.size());
+        const uint64_t cur = end ? 0 : retry_seqs[i];
+
+        if (!end && cur == prev + 1)
+        {
+            prev = cur;
+            continue;
+        }
+
+        const uint64_t range_len = prev - start + 1;
+        uint64_t sent = 0;
+        while (sent < range_len)
+        {
+            const uint16_t batch = static_cast<uint16_t>(std::min<uint64_t>(range_len - sent, 1024));
+            SendRequestUnlocked(start + sent, batch, NextRequestId());
+            sent += batch;
+        }
+
+        if (!end)
+        {
+            start = cur;
+            prev = cur;
         }
     }
 }
@@ -112,15 +156,17 @@ void RetransRequestManager::Cleanup()
     }
 }
 
-void RetransRequestManager::SendRequestUnlocked(uint64_t start_seq, uint16_t count)
+void RetransRequestManager::SendRequestUnlocked(uint64_t start_seq, uint16_t count, uint32_t request_id)
 {
     uint8_t send_buf[sizeof(RetransHeader) + sizeof(RetransRequestBody)] = {0};
 
     auto* hdr = reinterpret_cast<RetransHeader*>(send_buf);
     hdr->magic = htons(RETRANS_MAGIC);
+    hdr->version = RETRANS_VERSION;
+    hdr->reserved0 = 0;
     hdr->msg_type = htons(static_cast<uint16_t>(RetransMsgType::REQUEST));
     hdr->body_len = htons(sizeof(RetransRequestBody));
-    hdr->reserved = 0;
+    hdr->request_id = htonl(request_id);
 
     auto* body = reinterpret_cast<RetransRequestBody*>(send_buf + sizeof(RetransHeader));
     body->start_seq = HostToNet64(start_seq);
@@ -133,6 +179,12 @@ void RetransRequestManager::SendRequestUnlocked(uint64_t start_seq, uint16_t cou
              reinterpret_cast<const sockaddr*>(&server_addr_),
              sizeof(server_addr_));
 
-    std::cout << "[RetransRequest] request seq=" << start_seq
+    std::cout << "[RetransRequest] request_id=" << request_id
+              << " seq=" << start_seq
               << " count=" << count << std::endl;
+}
+
+uint32_t RetransRequestManager::NextRequestId()
+{
+    return next_request_id_.fetch_add(1);
 }
