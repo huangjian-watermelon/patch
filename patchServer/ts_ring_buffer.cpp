@@ -4,7 +4,7 @@
 TsRingBuffer::TsRingBuffer(size_t capacity)
     : capacity_(capacity)
 {
-    buffer_.reserve(capacity);
+    buffer_.resize(capacity);
 }
 
 void TsRingBuffer::Push(const TsPacket &packet)
@@ -71,7 +71,6 @@ size_t TsRingBuffer::GetCapacity() const
 {
     return capacity_;
 }
-
 
 
 
