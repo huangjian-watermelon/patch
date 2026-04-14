@@ -13,3 +13,24 @@
 ./patchServer /path/to/patch_server.json
 ./ts_request_client /path/to/ts_request_client.json
 ```
+
+## 压测与KPI
+
+仓库提供了最小化压测脚本和 KPI 提取脚本：
+
+- `tools/run_chaos_test.sh`：启动服务端/客户端并运行指定秒数，输出日志和 KPI 报告。
+- `tools/kpi_from_logs.py`：从日志提取 `missing/request/resent/recovered/timeout` 等指标。
+- `tools/netem_profile.sh`：基于 `tc netem` 注入/清理基础丢包、延迟、乱序（需 root）。
+
+示例：
+
+```bash
+# 注入网络扰动（需 root）
+sudo tools/netem_profile.sh apply eth0
+
+# 跑 120 秒压测
+tools/run_chaos_test.sh 120
+
+# 清理网络扰动
+sudo tools/netem_profile.sh clear eth0
+```
