@@ -6,7 +6,10 @@ CONFIG -= qt
 TARGET = tsRequestClient
 
 SOURCES += \
-        main.cpp
+        main.cpp \
+        packet_reorder_buffer.cpp \
+        retrans_request_manager.cpp \
+        ts_output_sender.cpp
 
 HEADERS += \
     retrans_protocol.h \
