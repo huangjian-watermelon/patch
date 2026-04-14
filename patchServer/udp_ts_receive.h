@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 
 #include "ts_ring_buffer.h"
+#include "ts_loss_detector.h"
 
 class UdpTsReceiver
 {
@@ -36,6 +37,7 @@ private:
 
     TsRingBuffer& ring_buffer_;
     uint64_t global_seq_ = 0;
+    TsLossDetector loss_detector_;
 
     uint64_t udp_packet_count_ = 0;
     uint64_t ts_packet_count_ = 0;
