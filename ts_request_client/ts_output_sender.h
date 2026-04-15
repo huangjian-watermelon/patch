@@ -31,6 +31,7 @@ public:
     void Start();
     void Stop();
     void PushTs(const uint8_t* ts188);
+    void ResetForNewSession();
     void PrintStats() const;
 
 private:

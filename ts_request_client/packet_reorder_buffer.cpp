@@ -113,6 +113,25 @@ void PacketReorderBuffer::MarkSeqExpired(uint64_t seq)
     DeliverAvailableLocked();
 }
 
+void PacketReorderBuffer::ResetForNewSession(uint64_t session_id, uint64_t first_seq)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    current_session_id_ = session_id;
+    buffer_.clear();
+    expired_seqs_.clear();
+    initialized_ = true;
+    expected_seq_ = first_seq;
+    ++restart_resync_;
+
+    if (sender_)
+    {
+        sender_->ResetForNewSession();
+    }
+
+    std::cout << "[ReorderBuffer] switch session_id=" << current_session_id_
+              << " reset expected_seq=" << expected_seq_ << std::endl;
+}
+
 void PacketReorderBuffer::PrintStats() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -122,6 +141,7 @@ void PacketReorderBuffer::PrintStats() const
               << " drop_old=" << drop_old_
               << " drop_duplicate=" << drop_duplicate_
               << " restart_resync=" << restart_resync_
+              << " session_id=" << current_session_id_
               << " buffer_size=" << buffer_.size()
               << " expected_seq=" << expected_seq_
               << '\n';

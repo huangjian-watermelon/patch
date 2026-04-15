@@ -57,6 +57,7 @@ bool LoadConfig(const std::string& path, ClientConfig& cfg)
 static PacketReorderBuffer g_reorder_buffer;
 static RetransRequestManager g_retrans_mgr;
 static std::atomic<bool> g_running{true};
+static std::atomic<uint64_t> g_current_session_id{0};
 
 void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_addr)
 {
@@ -85,6 +86,19 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
         }
 
         uint64_t seq = pkt.seq;
+        const uint64_t pkt_session_id = pkt.session_id;
+
+        const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
+        if (current_session_id == 0 || pkt_session_id != current_session_id)
+        {
+            std::cout << "[main stream] switch session_id from " << current_session_id
+                      << " to " << pkt_session_id << ", reset state" << std::endl;
+
+            g_current_session_id.store(pkt_session_id, std::memory_order_relaxed);
+            g_retrans_mgr.OnSessionChanged(pkt_session_id);
+            g_reorder_buffer.ResetForNewSession(pkt_session_id, pkt.seq);
+            has_last = false;
+        }
 
         if (has_last && seq > last_seq + 1)
         {
@@ -125,6 +139,12 @@ void RetransRecvLoop(int retrans_recv_sock)
         }
 
         if (pkt.ts_data[0] != 0x47)
+        {
+            continue;
+        }
+
+        const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
+        if (current_session_id != 0 && pkt.session_id != current_session_id)
         {
             continue;
         }

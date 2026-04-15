@@ -53,6 +53,20 @@ void RetransRequestManager::OnPacketRecovered(uint64_t seq)
     }
 }
 
+void RetransRequestManager::OnSessionChanged(uint64_t session_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (current_session_id_ == session_id)
+    {
+        return;
+    }
+
+    current_session_id_ = session_id;
+    missing_map_.clear();
+    std::cout << "[RetransRequest] switch session_id=" << current_session_id_
+              << ", clear missing state" << std::endl;
+}
+
 void RetransRequestManager::CheckTimeouts(std::vector<uint64_t>& expired_seqs)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -169,6 +183,7 @@ void RetransRequestManager::SendRequestUnlocked(uint64_t start_seq, uint16_t cou
     hdr->request_id = htonl(request_id);
 
     auto* body = reinterpret_cast<RetransRequestBody*>(send_buf + sizeof(RetransHeader));
+    body->session_id = HostToNet64(current_session_id_);
     body->start_seq = HostToNet64(start_seq);
     body->count = htons(count);
 

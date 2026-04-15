@@ -24,6 +24,7 @@ public:
     bool InitDeliver(const std::string& ip, uint16_t port);
     void OnPacket(const StreamPacket& pkt);
     void MarkSeqExpired(uint64_t seq);
+    void ResetForNewSession(uint64_t session_id, uint64_t first_seq);
     void PrintStats() const;
     void SetSender(TsOutputSender* sender);
 
@@ -48,6 +49,7 @@ private:
     uint64_t drop_old_ = 0;
     uint64_t drop_duplicate_ = 0;
     uint64_t restart_resync_ = 0;
+    uint64_t current_session_id_ = 0;
 
     TsOutputSender* sender_ = nullptr;
 };

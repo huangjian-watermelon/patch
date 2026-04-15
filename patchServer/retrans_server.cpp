@@ -207,6 +207,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
         reinterpret_cast<const RetransRequestBody*>(data + sizeof(RetransHeader));
 
     const uint64_t start_seq = NetToHost64(req->start_seq);
+    const uint64_t request_session_id = NetToHost64(req->session_id);
     const uint16_t count = ntohs(req->count);
 
     if (count == 0)
@@ -225,6 +226,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
     std::cout << "[RetransServer] request from "
               << client_ip << ":" << ntohs(client_addr.sin_port)
               << " request_id=" << request_id
+              << " session_id=" << request_session_id
               << " start_seq=" << start_seq
               << " count=" << count << std::endl;
 
@@ -259,6 +261,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
 //                    kTsPacketSize);
 
         StreamPacket pkt{};
+        pkt.session_id = request_session_id;
         pkt.seq = packet.seq;
         std::memcpy(pkt.ts_data, packet.data, kTsPacketSize);
 

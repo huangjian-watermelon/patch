@@ -25,6 +25,7 @@ struct RetransHeader
 
 struct RetransRequestBody
 {
+    uint64_t session_id;
     uint64_t start_seq;
     uint16_t count;
 };
