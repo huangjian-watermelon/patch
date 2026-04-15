@@ -4,6 +4,10 @@
 #include <iostream>
 #include <unistd.h>
 
+namespace {
+constexpr uint64_t kSeqResetThreshold = MAX_BUFFER_SIZE * 8;
+}
+
 PacketReorderBuffer::~PacketReorderBuffer()
 {
     if (deliver_sock_ >= 0)
@@ -51,6 +55,18 @@ void PacketReorderBuffer::OnPacket(const StreamPacket& pkt)
     std::lock_guard<std::mutex> lock(mutex_);
 
     ++recv_total_;
+
+    if (initialized_ && expected_seq_ > pkt.seq &&
+        (expected_seq_ - pkt.seq) > kSeqResetThreshold)
+    {
+        std::cout << "[ReorderBuffer] detect seq reset/restart, expected_seq="
+                  << expected_seq_ << " new_seq=" << pkt.seq << std::endl;
+
+        buffer_.clear();
+        expired_seqs_.clear();
+        expected_seq_ = pkt.seq;
+        ++restart_resync_;
+    }
 
     if (!initialized_)
     {
@@ -105,6 +121,7 @@ void PacketReorderBuffer::PrintStats() const
               << " delivered=" << delivered_total_
               << " drop_old=" << drop_old_
               << " drop_duplicate=" << drop_duplicate_
+              << " restart_resync=" << restart_resync_
               << " buffer_size=" << buffer_.size()
               << " expected_seq=" << expected_seq_
               << '\n';

@@ -47,6 +47,7 @@ private:
     uint64_t delivered_total_ = 0;
     uint64_t drop_old_ = 0;
     uint64_t drop_duplicate_ = 0;
+    uint64_t restart_resync_ = 0;
 
     TsOutputSender* sender_ = nullptr;
 };
