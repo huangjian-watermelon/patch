@@ -122,6 +122,9 @@ void PacketReorderBuffer::ResetForNewSession(uint64_t session_id, uint64_t first
     initialized_ = true;
     expected_seq_ = first_seq;
     ++restart_resync_;
+    delivered_count_log_ = 0;
+    first_seq_log_ = 0;
+    first_packet_seen_ = false;
 
     if (sender_)
     {
@@ -182,20 +185,16 @@ void PacketReorderBuffer::DeliverAvailableLocked()
 
 void PacketReorderBuffer::DeliverPacketLocked(const StreamPacket& pkt)
 {
-    static uint64_t delivered_count = 0;
-    static uint64_t first_seq = 0;
-    static bool first = true;
-
-    if (first)
+    if (!first_packet_seen_)
     {
-        first_seq = pkt.seq;
-        first = false;
+        first_seq_log_ = pkt.seq;
+        first_packet_seen_ = true;
     }
-    delivered_count++;
-    if ((delivered_count % 500) == 0)
+    ++delivered_count_log_;
+    if ((delivered_count_log_ % 500) == 0)
     {
-        std::cout << "[DELIVER] count = " << delivered_count
-                  << "  first_seq = " << first_seq
+        std::cout << "[DELIVER] count = " << delivered_count_log_
+                  << "  first_seq = " << first_seq_log_
                   << "  current_seq = " << pkt.seq
                   << "\n";
     }

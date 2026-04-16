@@ -50,6 +50,9 @@ private:
     uint64_t drop_duplicate_ = 0;
     uint64_t restart_resync_ = 0;
     uint64_t current_session_id_ = 0;
+    uint64_t delivered_count_log_ = 0;
+    uint64_t first_seq_log_ = 0;
+    bool first_packet_seen_ = false;
 
     TsOutputSender* sender_ = nullptr;
 };
