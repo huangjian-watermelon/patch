@@ -1,0 +1,8 @@
+{
+  "input_mcast_ip": "238.1.1.130",
+  "input_mcast_port": 1234,
+  "req_bind_ip": "0.0.0.0",
+  "req_bind_port": 9000,
+  "retrans_send_port": 9001,
+  "ring_capacity": 102400
+}
