@@ -5,6 +5,7 @@ CONFIG -= qt
 TARGET = patchRetransServer
 
 SOURCES += \
+    ../shared/json_config.cpp \
     retrans_service_main.cpp \
     ts_loss_detector.cpp \
     ts_ring_buffer.cpp \

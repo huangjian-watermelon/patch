@@ -129,6 +129,14 @@ void TsOutputSender::PushTs(const uint8_t* ts188)
     cv_.notify_one();
 }
 
+void TsOutputSender::ResetForNewSession()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    queue_.clear();
+    started_ = false;
+    std::cout << "[TsOutputSender] reset for new session" << std::endl;
+}
+
 void TsOutputSender::PrintStats() const
 {
     std::lock_guard<std::mutex> lock(mutex_);

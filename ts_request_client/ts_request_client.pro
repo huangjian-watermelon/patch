@@ -6,6 +6,7 @@ CONFIG -= qt
 TARGET = tsRequestClient
 
 SOURCES += \
+        ../shared/json_config.cpp \
         main.cpp \
         packet_reorder_buffer.cpp \
         retrans_request_manager.cpp \

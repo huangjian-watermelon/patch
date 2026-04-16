@@ -11,8 +11,9 @@
 #include <chrono>
 
 UdpTsReceiver::UdpTsReceiver(TsRingBuffer& ring_buffer)
-    : ring_buffer_(ring_buffer)
+    : ring_buffer_(ring_buffer), session_id_(CreateSessionId())
 {
+    std::cout << "[UdpTsReceiver] session_id=" << session_id_ << std::endl;
 }
 
 UdpTsReceiver::~UdpTsReceiver()
@@ -155,6 +156,7 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
         }
 
         TsPacket packet;
+        packet.session_id = session_id_;
         packet.seq = global_seq_++;
         packet.recv_time_us = GetNowUs();
         std::memcpy(packet.data, data + offset, TS_PACKET_SIZE);
@@ -183,6 +185,7 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
 //            if (packet.seq % 100 == 0)
 //                continue;
             StreamPacket pkt{};
+            pkt.session_id = session_id_;
             pkt.seq = packet.seq;
             std::memcpy(pkt.ts_data, packet.data, TS_PACKET_SIZE);
 
@@ -215,4 +218,12 @@ uint64_t UdpTsReceiver::GetNowMs() const
 {
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+}
+
+uint64_t UdpTsReceiver::CreateSessionId() const
+{
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    const uint64_t tick = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+    const uint64_t pid = static_cast<uint64_t>(::getpid() & 0xFFFF);
+    return (tick << 16) ^ pid;
 }

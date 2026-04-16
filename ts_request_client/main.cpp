@@ -5,13 +5,12 @@
 #include <thread>
 #include <chrono>
 #include <string>
-#include <fstream>
-#include <regex>
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "../shared/json_config.h"
 #include "recv_stream.h"
 #include "retrans_protocol.h"
 #include "packet_reorder_buffer.h"
@@ -33,58 +32,23 @@ struct ClientConfig
     uint16_t output_mcast_port = 1234;
 };
 
-bool ReadFile(const std::string& path, std::string& content)
-{
-    std::ifstream ifs(path);
-    if (!ifs.is_open())
-    {
-        return false;
-    }
-    content.assign((std::istreambuf_iterator<char>(ifs)),
-                   std::istreambuf_iterator<char>());
-    return true;
-}
-
-bool GetString(const std::string& json, const std::string& key, std::string& out)
-{
-    const std::regex re("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-    std::smatch m;
-    if (!std::regex_search(json, m, re) || m.size() < 2)
-    {
-        return false;
-    }
-    out = m[1].str();
-    return true;
-}
-
-bool GetU16(const std::string& json, const std::string& key, uint16_t& out)
-{
-    const std::regex re("\"" + key + "\"\\s*:\\s*(\\d+)");
-    std::smatch m;
-    if (!std::regex_search(json, m, re) || m.size() < 2)
-    {
-        return false;
-    }
-    out = static_cast<uint16_t>(std::stoi(m[1].str()));
-    return true;
-}
-
 bool LoadConfig(const std::string& path, ClientConfig& cfg)
 {
-    std::string json;
-    if (!ReadFile(path, json))
+    JsonConfig json;
+    std::string err;
+    if (!JsonConfig::LoadFromFile(path, json, err))
     {
-        std::cerr << "Failed to open config file: " << path << "\n";
+        std::cerr << "Load config failed: " << err << "\n";
         return false;
     }
 
-    GetString(json, "stream_mcast_ip", cfg.stream_mcast_ip);
-    GetU16(json, "stream_port", cfg.stream_port);
-    GetString(json, "server_ip", cfg.server_ip);
-    GetU16(json, "retrans_request_port", cfg.retrans_request_port);
-    GetU16(json, "retrans_recv_port", cfg.retrans_recv_port);
-    GetString(json, "output_mcast_ip", cfg.output_mcast_ip);
-    GetU16(json, "output_mcast_port", cfg.output_mcast_port);
+    json.GetString("stream_mcast_ip", cfg.stream_mcast_ip);
+    json.GetUInt16("stream_port", cfg.stream_port);
+    json.GetString("server_ip", cfg.server_ip);
+    json.GetUInt16("retrans_request_port", cfg.retrans_request_port);
+    json.GetUInt16("retrans_recv_port", cfg.retrans_recv_port);
+    json.GetString("output_mcast_ip", cfg.output_mcast_ip);
+    json.GetUInt16("output_mcast_port", cfg.output_mcast_port);
 
     return true;
 }
@@ -93,6 +57,7 @@ bool LoadConfig(const std::string& path, ClientConfig& cfg)
 static PacketReorderBuffer g_reorder_buffer;
 static RetransRequestManager g_retrans_mgr;
 static std::atomic<bool> g_running{true};
+static std::atomic<uint64_t> g_current_session_id{0};
 
 void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_addr)
 {
@@ -121,6 +86,19 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
         }
 
         uint64_t seq = pkt.seq;
+        const uint64_t pkt_session_id = pkt.session_id;
+
+        const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
+        if (current_session_id == 0 || pkt_session_id != current_session_id)
+        {
+            std::cout << "[main stream] switch session_id from " << current_session_id
+                      << " to " << pkt_session_id << ", reset state" << std::endl;
+
+            g_current_session_id.store(pkt_session_id, std::memory_order_relaxed);
+            g_retrans_mgr.OnSessionChanged(pkt_session_id);
+            g_reorder_buffer.ResetForNewSession(pkt_session_id, pkt.seq);
+            has_last = false;
+        }
 
         if (has_last && seq > last_seq + 1)
         {
@@ -161,6 +139,12 @@ void RetransRecvLoop(int retrans_recv_sock)
         }
 
         if (pkt.ts_data[0] != 0x47)
+        {
+            continue;
+        }
+
+        const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
+        if (current_session_id != 0 && pkt.session_id != current_session_id)
         {
             continue;
         }

@@ -5,13 +5,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "ts_ring_buffer.h"
-
-
-struct StreamPacket
-{
-    uint64_t seq;
-    uint8_t ts_data[188];
-};
+#include "stream_packet.h"
 
 
 class RetransServer

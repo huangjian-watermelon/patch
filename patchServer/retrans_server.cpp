@@ -166,14 +166,24 @@ void RetransServer::HandleRequest(const uint8_t* data,
 
     const auto* header = reinterpret_cast<const RetransHeader*>(data);
     const uint16_t magic = ntohs(header->magic);
+    const uint8_t version = header->version;
     const uint16_t msg_type = ntohs(header->msg_type);
     const uint16_t body_len = ntohs(header->body_len);
+    const uint32_t request_id = ntohl(header->request_id);
 
     if (magic != RETRANS_MAGIC)
     {
         ++invalid_requests_;
         std::cerr << "[RetransServer] invalid magic=0x"
                   << std::hex << magic << std::dec << std::endl;
+        return;
+    }
+
+    if (version != RETRANS_VERSION)
+    {
+        ++invalid_requests_;
+        std::cerr << "[RetransServer] invalid version="
+                  << static_cast<uint32_t>(version) << std::endl;
         return;
     }
 
@@ -197,6 +207,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
         reinterpret_cast<const RetransRequestBody*>(data + sizeof(RetransHeader));
 
     const uint64_t start_seq = NetToHost64(req->start_seq);
+    const uint64_t request_session_id = NetToHost64(req->session_id);
     const uint16_t count = ntohs(req->count);
 
     if (count == 0)
@@ -214,6 +225,8 @@ void RetransServer::HandleRequest(const uint8_t* data,
 
     std::cout << "[RetransServer] request from "
               << client_ip << ":" << ntohs(client_addr.sin_port)
+              << " request_id=" << request_id
+              << " session_id=" << request_session_id
               << " start_seq=" << start_seq
               << " count=" << count << std::endl;
 
@@ -248,6 +261,7 @@ void RetransServer::HandleRequest(const uint8_t* data,
 //                    kTsPacketSize);
 
         StreamPacket pkt{};
+        pkt.session_id = request_session_id;
         pkt.seq = packet.seq;
         std::memcpy(pkt.ts_data, packet.data, kTsPacketSize);
 

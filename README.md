@@ -8,6 +8,8 @@
 - 补包程序默认读取 `retrans_service.json`
 - 客户端默认读取 `ts_request_client.json`
 
+配置解析已统一使用共享 JSON 解析模块（`shared/json_config.*`），不再使用正则抽取字段。
+
 也可以手动指定配置文件路径：
 
 ```bash
@@ -24,6 +26,11 @@
 2. `patchRetransServer`：接收 `0.0.0.0:9000` 补包请求，并发补包到 `0.0.0.0:9001`（目的IP沿用请求来源IP，端口为9001）。
 
 这样即使补包进程崩溃，推流进程仍可独立运行（反之亦然）。
+
+## 会话切换（session_id）
+
+- `patchStreamForwarder` 每次启动都会生成新的 `session_id`，并跟随每个主流包发送给客户端。
+- `ts_request_client` 检测到 `session_id` 变化后，会重置重排和缺包状态并重新起播，避免卡在旧 `expected_seq`。
 
 ## 压测与KPI
 

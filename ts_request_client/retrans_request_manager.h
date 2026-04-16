@@ -5,6 +5,7 @@
 #include <mutex>
 #include <chrono>
 #include <cstdint>
+#include <atomic>
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -27,12 +28,14 @@ public:
     void Init(int req_sock, const sockaddr_in& server_addr);
     void OnMissingRange(uint64_t start_seq, uint16_t count);
     void OnPacketRecovered(uint64_t seq);
+    void OnSessionChanged(uint64_t session_id);
     void CheckTimeouts(std::vector<uint64_t>& expired_seqs);
     void PrintStats();
     void Cleanup();
 
 private:
-    void SendRequestUnlocked(uint64_t start_seq, uint16_t count);
+    void SendRequestUnlocked(uint64_t start_seq, uint16_t count, uint32_t request_id);
+    uint32_t NextRequestId();
 
 private:
     std::mutex mutex_;
@@ -49,4 +52,6 @@ private:
     uint64_t requested_packets_ = 0;
     uint64_t retry_requests_ = 0;
     uint64_t recovered_packets_ = 0;
+    std::atomic<uint32_t> next_request_id_{1};
+    uint64_t current_session_id_ = 0;
 };
