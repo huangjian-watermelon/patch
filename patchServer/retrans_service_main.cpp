@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <csignal>
 
 #include "../shared/json_config.h"
 #include "retrans_server.h"
@@ -50,6 +51,12 @@ uint64_t GetNowUs()
 {
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now).count());
+}
+
+void IgnoreTerminalSignals()
+{
+    std::signal(SIGINT, SIG_IGN);
+    std::signal(SIGHUP, SIG_IGN);
 }
 
 bool InitStreamPacketSocket(const RetransServiceConfig& cfg, int& sockfd)
@@ -133,6 +140,8 @@ void StreamPacketRecvLoop(int sockfd, TsRingBuffer& ring_buffer)
 
 int main(int argc, char* argv[])
 {
+    IgnoreTerminalSignals();
+
     RetransServiceConfig cfg;
     const std::string config_path = (argc >= 2) ? argv[1] : "retrans_service.json";
     if (!LoadConfig(config_path, cfg))

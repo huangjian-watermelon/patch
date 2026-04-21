@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <csignal>
 
 #include "../shared/json_config.h"
 #include "ts_ring_buffer.h"
@@ -32,10 +33,18 @@ bool LoadConfig(const std::string& path, StreamForwarderConfig& cfg)
     json.GetSize("ring_capacity", cfg.ring_capacity);
     return true;
 }
+
+void IgnoreTerminalSignals()
+{
+    std::signal(SIGINT, SIG_IGN);
+    std::signal(SIGHUP, SIG_IGN);
+}
 }
 
 int main(int argc, char* argv[])
 {
+    IgnoreTerminalSignals();
+
     StreamForwarderConfig cfg;
     const std::string config_path = (argc >= 2) ? argv[1] : "stream_forwarder.json";
     if (!LoadConfig(config_path, cfg))

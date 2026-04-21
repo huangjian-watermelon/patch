@@ -18,6 +18,8 @@
 ./ts_request_client /path/to/ts_request_client.json
 ```
 
+说明：`patchStreamForwarder` 和 `patchRetransServer` 现在会忽略终端 `SIGINT/SIGHUP`，避免你在同一终端结束 `ts_request_client` 时把服务端一起停掉。需要停止服务端时请单独 `kill -TERM <pid>`。
+
 ## patchServer 拆分说明
 
 现在 `patchServer` 被拆分为两个独立程序，可分别拉起：
