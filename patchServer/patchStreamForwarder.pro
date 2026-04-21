@@ -2,14 +2,14 @@ TEMPLATE = app
 CONFIG += console c++11 thread
 CONFIG -= app_bundle
 CONFIG -= qt
-TARGET = patchServer
+TARGET = patchStreamForwarder
 
 SOURCES += \
-    main.cpp \
+    ../shared/json_config.cpp \
+    stream_forwarder_main.cpp \
     ts_loss_detector.cpp \
     ts_ring_buffer.cpp \
-    udp_ts_receive.cpp \
-    retrans_server.cpp
+    udp_ts_receive.cpp
 
 HEADERS += \
     ts_ring_buffer.h \
@@ -17,6 +17,4 @@ HEADERS += \
     ts_packet.h \
     ts_parsed_header.h \
     udp_ts_receive.h \
-    retrans_protocol.h \
-    retrans_server.h \
     stream_packet.h
