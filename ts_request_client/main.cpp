@@ -216,9 +216,6 @@ int main(int argc, char* argv[])
 
     int reuse = 1;
     ::setsockopt(stream_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-#ifdef SO_REUSEPORT
-    ::setsockopt(stream_sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
-#endif
 
     int rcvbuf = 4 * 1024 * 1024;
     ::setsockopt(stream_sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
