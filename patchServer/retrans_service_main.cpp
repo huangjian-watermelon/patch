@@ -17,8 +17,8 @@
 namespace {
 struct RetransServiceConfig
 {
-    std::string input_mcast_ip = "238.1.1.130";
-    uint16_t input_mcast_port = 1234;
+    std::string input_mcast_ip = "238.1.1.127";
+    uint16_t input_mcast_port = 5040;
 
     std::string req_bind_ip = "0.0.0.0";
     uint16_t req_bind_port = 9000;
@@ -96,11 +96,22 @@ bool InitStreamPacketSocket(const RetransServiceConfig& cfg, int& sockfd)
 void StreamPacketRecvLoop(int sockfd, TsRingBuffer& ring_buffer)
 {
     StreamPacket pkt{};
+    auto last_warn = std::chrono::steady_clock::time_point{};
     while (true)
     {
         const ssize_t n = ::recvfrom(sockfd, &pkt, sizeof(pkt), 0, nullptr, nullptr);
         if (n != static_cast<ssize_t>(sizeof(pkt)))
         {
+            auto now = std::chrono::steady_clock::now();
+            if (last_warn.time_since_epoch().count() == 0 ||
+                std::chrono::duration_cast<std::chrono::seconds>(now - last_warn).count() >= 1)
+            {
+                std::cerr << "[RetransService] unexpected packet size " << n
+                          << ", expect " << sizeof(pkt)
+                          << " (check input_mcast_ip/input_mcast_port, should be StreamPacket flow)"
+                          << std::endl;
+                last_warn = now;
+            }
             continue;
         }
 
