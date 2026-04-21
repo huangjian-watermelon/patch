@@ -1,6 +1,7 @@
 #include "udp_ts_receive.h"
 #include "ts_parsed_header.h"
 #include "stream_packet.h"
+#include "retrans_protocol.h"
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -185,8 +186,8 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
 //            if (packet.seq % 100 == 0)
 //                continue;
             StreamPacket pkt{};
-            pkt.session_id = session_id_;
-            pkt.seq = packet.seq;
+            pkt.session_id = HostToNet64(session_id_);
+            pkt.seq = HostToNet64(packet.seq);
             std::memcpy(pkt.ts_data, packet.data, TS_PACKET_SIZE);
 
             const ssize_t sent = ::sendto(sendsockfd_,

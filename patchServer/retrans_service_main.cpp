@@ -8,6 +8,7 @@
 
 #include "../shared/json_config.h"
 #include "retrans_server.h"
+#include "retrans_protocol.h"
 #include "stream_packet.h"
 #include "ts_ring_buffer.h"
 
@@ -128,8 +129,8 @@ void StreamPacketRecvLoop(int sockfd, TsRingBuffer& ring_buffer)
         }
 
         TsPacket packet;
-        packet.session_id = pkt.session_id;
-        packet.seq = pkt.seq;
+        packet.session_id = NetToHost64(pkt.session_id);
+        packet.seq = NetToHost64(pkt.seq);
         packet.recv_time_us = GetNowUs();
         std::memcpy(packet.data, pkt.ts_data, TS_PACKET_SIZE);
 

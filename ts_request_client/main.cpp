@@ -85,8 +85,12 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
             continue;
         }
 
-        uint64_t seq = pkt.seq;
-        const uint64_t pkt_session_id = pkt.session_id;
+        StreamPacket host_pkt = pkt;
+        host_pkt.session_id = NetToHost64(pkt.session_id);
+        host_pkt.seq = NetToHost64(pkt.seq);
+
+        uint64_t seq = host_pkt.seq;
+        const uint64_t pkt_session_id = host_pkt.session_id;
 
         const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
         if (current_session_id == 0 || pkt_session_id != current_session_id)
@@ -96,7 +100,7 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
 
             g_current_session_id.store(pkt_session_id, std::memory_order_relaxed);
             g_retrans_mgr.OnSessionChanged(pkt_session_id);
-            g_reorder_buffer.ResetForNewSession(pkt_session_id, pkt.seq);
+            g_reorder_buffer.ResetForNewSession(pkt_session_id, host_pkt.seq);
             has_last = false;
         }
 
@@ -114,8 +118,8 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
         has_last = true;
         last_seq = seq;
 
-        g_retrans_mgr.OnPacketRecovered(pkt.seq);
-        g_reorder_buffer.OnPacket(pkt);
+        g_retrans_mgr.OnPacketRecovered(host_pkt.seq);
+        g_reorder_buffer.OnPacket(host_pkt);
     }
     std::cout << "MainStreamThread is exit!" << std::endl;
 }
@@ -143,14 +147,18 @@ void RetransRecvLoop(int retrans_recv_sock)
             continue;
         }
 
+        StreamPacket host_pkt = pkt;
+        host_pkt.session_id = NetToHost64(pkt.session_id);
+        host_pkt.seq = NetToHost64(pkt.seq);
+
         const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
-        if (current_session_id != 0 && pkt.session_id != current_session_id)
+        if (current_session_id != 0 && host_pkt.session_id != current_session_id)
         {
             continue;
         }
 
-        g_retrans_mgr.OnPacketRecovered(pkt.seq);
-        g_reorder_buffer.OnPacket(pkt);
+        g_retrans_mgr.OnPacketRecovered(host_pkt.seq);
+        g_reorder_buffer.OnPacket(host_pkt);
     }
 
     std::cout << "RetransRecvLoop is exit!" << std::endl;

@@ -261,8 +261,8 @@ void RetransServer::HandleRequest(const uint8_t* data,
 //                    kTsPacketSize);
 
         StreamPacket pkt{};
-        pkt.session_id = request_session_id;
-        pkt.seq = packet.seq;
+        pkt.session_id = HostToNet64(packet.session_id);
+        pkt.seq = HostToNet64(packet.seq);
         std::memcpy(pkt.ts_data, packet.data, kTsPacketSize);
 
         sockaddr_in client_send_addr = client_addr;

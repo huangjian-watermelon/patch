@@ -20,6 +20,13 @@
 
 说明：`patchStreamForwarder` 和 `patchRetransServer` 现在会忽略终端 `SIGINT/SIGHUP`，避免你在同一终端结束 `ts_request_client` 时把服务端一起停掉。需要停止服务端时请单独 `kill -TERM <pid>`。
 
+跨机器部署（上游服务器运行 `patchStreamForwarder` + `patchRetransServer`，下游机器运行 `ts_request_client`）时，请至少确认：
+
+1. `ts_request_client.json` 里的 `server_ip` 改为上游 `patchRetransServer` 的可达 IP（不要用 `127.0.0.1`）。
+2. 下游机器能通过交换机加入主流组播 `stream_mcast_ip:stream_port`（默认 `238.1.1.127:5040`）。
+3. 上游机器放行 UDP `9000/9001`，确保补包请求和补包数据可达。
+4. 现在 `StreamPacket` 的 `session_id/seq` 已统一使用网络字节序发送，跨主机/跨端序系统也能正确解析。
+
 ## patchServer 拆分说明
 
 现在 `patchServer` 被拆分为两个独立程序，可分别拉起：
