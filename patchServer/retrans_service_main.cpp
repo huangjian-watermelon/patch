@@ -17,8 +17,8 @@
 namespace {
 struct RetransServiceConfig
 {
-    std::string input_mcast_ip = "238.1.1.127";
-    uint16_t input_mcast_port = 5040;
+    std::string input_mcast_ip = "238.1.1.130";
+    uint16_t input_mcast_port = 1234;
 
     std::string req_bind_ip = "0.0.0.0";
     uint16_t req_bind_port = 9000;
