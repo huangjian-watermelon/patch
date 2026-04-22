@@ -1,0 +1,13 @@
+{
+  "stream_mcast_ip": "238.1.1.127",
+  "stream_port": 5040,
+  "server_ip": "192.168.1.10",
+  "retrans_request_port": 9000,
+  "retrans_recv_port": 9001,
+  "retrans_enabled": 1,
+  "retrans_retry_interval_ms": 10,
+  "retrans_total_timeout_ms": 30,
+  "retrans_max_retry_count": 1,
+  "output_mcast_ip": "238.1.1.136",
+  "output_mcast_port": 1234
+}

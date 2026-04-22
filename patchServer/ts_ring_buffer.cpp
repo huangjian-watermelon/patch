@@ -4,30 +4,43 @@
 TsRingBuffer::TsRingBuffer(size_t capacity)
     : capacity_(capacity)
 {
-    buffer_.reserve(capacity);
+    buffer_.resize(capacity);
 }
 
 void TsRingBuffer::Push(const TsPacket &packet)
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    buffer_[writeIndex_] = packet;
-
-    writeIndex_ = (writeIndex_ + 1) % capacity_;
-
-    if (size_ < capacity_) {
-        ++size_;
-    }
-
-    if (!initialized_) {
+    if (!initialized_)
+    {
+        buffer_[packet.seq % capacity_] = packet;
         minSeq_ = packet.seq;
         maxSeq_ = packet.seq;
+        size_ = 1;
         initialized_ = true;
-    } else {
+        return;
+    }
+
+    if (packet.seq < minSeq_)
+    {
+        return;
+    }
+
+    buffer_[packet.seq % capacity_] = packet;
+
+    if (packet.seq > maxSeq_)
+    {
         maxSeq_ = packet.seq;
-        if (size_ == capacity_) {
+        if (maxSeq_ - minSeq_ + 1 > capacity_)
+        {
             minSeq_ = maxSeq_ - capacity_ + 1;
         }
+    }
+
+    size_ = static_cast<size_t>(maxSeq_ - minSeq_ + 1);
+    if (size_ > capacity_)
+    {
+        size_ = capacity_;
     }
 }
 
@@ -71,7 +84,5 @@ size_t TsRingBuffer::GetCapacity() const
 {
     return capacity_;
 }
-
-
 
 
