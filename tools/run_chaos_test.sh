@@ -4,8 +4,8 @@ set -euo pipefail
 # 用法:
 #   tools/run_chaos_test.sh [seconds]
 # 依赖:
-#   - patchStreamForwarder / patchRetransServer / tsRequestClient 二进制可执行
-#   - stream_forwarder.json / retrans_service.json / ts_request_client.json 配置存在
+#   - forwarder / retrans / client 二进制可执行
+#   - forwarder.json / retrans.json / client.json 配置存在
 # 结果:
 #   - logs/server.log logs/client.log
 #   - logs/kpi_report.json
@@ -22,17 +22,17 @@ CLIENT_LOG="${LOG_DIR}/client.log"
 : > "${FORWARDER_LOG}"
 : > "${CLIENT_LOG}"
 
-./patchRetransServer retrans_service.json >"${SERVER_LOG}" 2>&1 &
+./retrans retrans.json >"${SERVER_LOG}" 2>&1 &
 RETRANS_PID=$!
 
 sleep 1
 
-./patchStreamForwarder stream_forwarder.json >"${FORWARDER_LOG}" 2>&1 &
+./forwarder forwarder.json >"${FORWARDER_LOG}" 2>&1 &
 FORWARDER_PID=$!
 
 sleep 1
 
-./tsRequestClient ts_request_client.json >"${CLIENT_LOG}" 2>&1 &
+./client client.json >"${CLIENT_LOG}" 2>&1 &
 CLIENT_PID=$!
 
 cleanup() {

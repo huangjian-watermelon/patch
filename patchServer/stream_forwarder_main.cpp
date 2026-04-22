@@ -46,10 +46,10 @@ int main(int argc, char* argv[])
     IgnoreTerminalSignals();
 
     StreamForwarderConfig cfg;
-    const std::string config_path = (argc >= 2) ? argv[1] : "stream_forwarder.json";
+    const std::string config_path = (argc >= 2) ? argv[1] : "forwarder.json";
     if (!LoadConfig(config_path, cfg))
     {
-        std::cerr << "Usage: patchStreamForwarder <config.json>\n";
+        std::cerr << "Usage: forwarder <config.json>\n";
         return 1;
     }
 

@@ -220,7 +220,7 @@ void StatLoop()
 int main(int argc, char* argv[])
 {
     ClientConfig cfg;
-    const std::string config_path = (argc >= 2) ? argv[1] : "ts_request_client.json";
+    const std::string config_path = (argc >= 2) ? argv[1] : "client.json";
     if (!LoadConfig(config_path, cfg))
     {
         std::cerr << "Usage: ts_request_client <config.json>\n";

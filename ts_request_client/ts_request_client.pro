@@ -3,7 +3,7 @@ CONFIG += console c++11 thread
 CONFIG -= app_bundle
 CONFIG -= qt
 
-TARGET = tsRequestClient
+TARGET = client
 
 SOURCES += \
         ../shared/json_config.cpp \

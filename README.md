@@ -4,31 +4,31 @@
 
 服务端和客户端都通过 JSON 文件读取运行参数，不再使用启动参数逐项传入：
 
-- 推流程序默认读取 `stream_forwarder.json`
-- 补包程序默认读取 `retrans_service.json`
-- 客户端默认读取 `ts_request_client.json`
+- 推流程序（`forwarder`）默认读取 `forwarder.json`
+- 补包程序（`retrans`）默认读取 `retrans.json`
+- 客户端（`client`）默认读取 `client.json`
 
 配置解析已统一使用共享 JSON 解析模块（`shared/json_config.*`），不再使用正则抽取字段。
 
 也可以手动指定配置文件路径：
 
 ```bash
-./patchStreamForwarder /path/to/stream_forwarder.json
-./patchRetransServer /path/to/retrans_service.json
-./ts_request_client /path/to/ts_request_client.json
+./forwarder /path/to/forwarder.json
+./retrans /path/to/retrans.json
+./client /path/to/client.json
 ```
 
-说明：`patchStreamForwarder` 和 `patchRetransServer` 现在会忽略终端 `SIGINT/SIGHUP`，避免你在同一终端结束 `ts_request_client` 时把服务端一起停掉。需要停止服务端时请单独 `kill -TERM <pid>`。
+说明：`forwarder` 和 `retrans` 现在会忽略终端 `SIGINT/SIGHUP`，避免你在同一终端结束 `client` 时把服务端一起停掉。需要停止服务端时请单独 `kill -TERM <pid>`。
 
-跨机器部署（上游服务器运行 `patchStreamForwarder` + `patchRetransServer`，下游机器运行 `ts_request_client`）时，请至少确认：
+跨机器部署（上游服务器运行 `forwarder` + `retrans`，下游机器运行 `client`）时，请至少确认：
 
-1. `ts_request_client.json` 里的 `server_ip` 改为上游 `patchRetransServer` 的可达 IP（不要用 `127.0.0.1`）。
+1. `client.json` 里的 `server_ip` 改为上游 `retrans` 的可达 IP（不要用 `127.0.0.1`）。
 2. 下游机器能通过交换机加入主流组播 `stream_mcast_ip:stream_port`（默认 `238.1.1.127:5040`）。
 3. 上游机器放行 UDP `9000/9001`，确保补包请求和补包数据可达。
 4. 现在 `StreamPacket` 的 `session_id/seq` 已统一使用网络字节序发送，跨主机/跨端序系统也能正确解析。
-5. 若同时有大量客户端请求补包，可在 `retrans_service.json` 调大 `req_rcvbuf_bytes`，减少 UDP 请求排队溢出。
+5. 若同时有大量客户端请求补包，可在 `retrans.json` 调大 `req_rcvbuf_bytes`，减少 UDP 请求排队溢出。
 
-`ts_request_client.json` 里还支持补包容错参数，避免 `patchRetransServer` 异常时卡住播放：
+`client.json` 里还支持补包容错参数，避免 `retrans` 异常时卡住播放：
 
 - `retrans_enabled`：是否启用补包（`0`=关闭，主流缺包直接跳过，`1`=启用补包）。
 - `retrans_retry_interval_ms`：补包重试间隔。
@@ -39,15 +39,15 @@
 
 现在 `patchServer` 被拆分为两个独立程序，可分别拉起：
 
-1. `patchStreamForwarder`：接收 `238.1.1.130:1234` 并转发到 `238.1.1.127:5040`。  
-2. `patchRetransServer`：接收 `0.0.0.0:9000` 补包请求，并发补包到 `0.0.0.0:9001`（目的IP沿用请求来源IP，端口为9001）。其缓存输入来自 `patchStreamForwarder` 的输出流（默认 `238.1.1.127:5040`，即 `StreamPacket` 流）。
+1. `forwarder`：接收 `238.1.1.130:1234` 并转发到 `238.1.1.127:5040`。  
+2. `retrans`：接收 `0.0.0.0:9000` 补包请求，并发补包到 `0.0.0.0:9001`（目的IP沿用请求来源IP，端口为9001）。其缓存输入来自 `forwarder` 的输出流（默认 `238.1.1.127:5040`，即 `StreamPacket` 流）。
 
 这样即使补包进程崩溃，推流进程仍可独立运行（反之亦然）。
 
 ## 会话切换（session_id）
 
-- `patchStreamForwarder` 每次启动都会生成新的 `session_id`，并跟随每个主流包发送给客户端。
-- `ts_request_client` 检测到 `session_id` 变化后，会重置重排和缺包状态并重新起播，避免卡在旧 `expected_seq`。
+- `forwarder` 每次启动都会生成新的 `session_id`，并跟随每个主流包发送给客户端。
+- `client` 检测到 `session_id` 变化后，会重置重排和缺包状态并重新起播，避免卡在旧 `expected_seq`。
 
 ## 压测与KPI
 

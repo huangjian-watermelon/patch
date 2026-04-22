@@ -146,10 +146,10 @@ int main(int argc, char* argv[])
     IgnoreTerminalSignals();
 
     RetransServiceConfig cfg;
-    const std::string config_path = (argc >= 2) ? argv[1] : "retrans_service.json";
+    const std::string config_path = (argc >= 2) ? argv[1] : "retrans.json";
     if (!LoadConfig(config_path, cfg))
     {
-        std::cerr << "Usage: patchRetransServer <config.json>\n";
+        std::cerr << "Usage: retrans <config.json>\n";
         return 1;
     }
 
