@@ -26,6 +26,9 @@ public:
     using Clock = std::chrono::steady_clock;
 
     void Init(int req_sock, const sockaddr_in& server_addr);
+    void Configure(std::chrono::milliseconds retry_interval,
+                   std::chrono::milliseconds total_timeout,
+                   int max_retry_count);
     void OnMissingRange(uint64_t start_seq, uint16_t count);
     void OnPacketRecovered(uint64_t seq);
     void OnSessionChanged(uint64_t session_id);

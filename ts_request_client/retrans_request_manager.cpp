@@ -10,6 +10,16 @@ void RetransRequestManager::Init(int req_sock, const sockaddr_in& server_addr)
     server_addr_ = server_addr;
 }
 
+void RetransRequestManager::Configure(std::chrono::milliseconds retry_interval,
+                                      std::chrono::milliseconds total_timeout,
+                                      int max_retry_count)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    retry_interval_ = retry_interval;
+    total_timeout_ = total_timeout;
+    max_retry_count_ = std::max(0, max_retry_count);
+}
+
 void RetransRequestManager::OnMissingRange(uint64_t start_seq, uint16_t count)
 {
     std::lock_guard<std::mutex> lock(mutex_);

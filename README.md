@@ -28,6 +28,13 @@
 4. 现在 `StreamPacket` 的 `session_id/seq` 已统一使用网络字节序发送，跨主机/跨端序系统也能正确解析。
 5. 若同时有大量客户端请求补包，可在 `retrans_service.json` 调大 `req_rcvbuf_bytes`，减少 UDP 请求排队溢出。
 
+`ts_request_client.json` 里还支持补包容错参数，避免 `patchRetransServer` 异常时卡住播放：
+
+- `retrans_enabled`：是否启用补包（`0`=关闭，主流缺包直接跳过，`1`=启用补包）。
+- `retrans_retry_interval_ms`：补包重试间隔。
+- `retrans_total_timeout_ms`：单个缺包最多等待时间，到时后直接跳过继续播。
+- `retrans_max_retry_count`：单个缺包最大重试次数。
+
 ## patchServer 拆分说明
 
 现在 `patchServer` 被拆分为两个独立程序，可分别拉起：

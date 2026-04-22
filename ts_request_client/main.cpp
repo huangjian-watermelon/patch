@@ -30,6 +30,10 @@ struct ClientConfig
     uint16_t retrans_recv_port = 9001;
     std::string output_mcast_ip = "238.1.1.136";
     uint16_t output_mcast_port = 1234;
+    uint16_t retrans_enabled = 1;
+    uint16_t retrans_retry_interval_ms = 10;
+    uint16_t retrans_total_timeout_ms = 30;
+    uint16_t retrans_max_retry_count = 1;
 };
 
 bool LoadConfig(const std::string& path, ClientConfig& cfg)
@@ -49,6 +53,10 @@ bool LoadConfig(const std::string& path, ClientConfig& cfg)
     json.GetUInt16("retrans_recv_port", cfg.retrans_recv_port);
     json.GetString("output_mcast_ip", cfg.output_mcast_ip);
     json.GetUInt16("output_mcast_port", cfg.output_mcast_port);
+    json.GetUInt16("retrans_enabled", cfg.retrans_enabled);
+    json.GetUInt16("retrans_retry_interval_ms", cfg.retrans_retry_interval_ms);
+    json.GetUInt16("retrans_total_timeout_ms", cfg.retrans_total_timeout_ms);
+    json.GetUInt16("retrans_max_retry_count", cfg.retrans_max_retry_count);
 
     return true;
 }
@@ -58,6 +66,7 @@ static PacketReorderBuffer g_reorder_buffer;
 static RetransRequestManager g_retrans_mgr;
 static std::atomic<bool> g_running{true};
 static std::atomic<uint64_t> g_current_session_id{0};
+static bool g_retrans_enabled = true;
 
 void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_addr)
 {
@@ -112,7 +121,17 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
             std::cout << "[main stream] missing start_seq = " << miss_start
                       << " count = " << miss_count << std::endl;
 
-            g_retrans_mgr.OnMissingRange(miss_start, miss_count);
+            if (g_retrans_enabled)
+            {
+                g_retrans_mgr.OnMissingRange(miss_start, miss_count);
+            }
+            else
+            {
+                for (uint64_t s = miss_start; s < miss_start + miss_count; ++s)
+                {
+                    g_reorder_buffer.MarkSeqExpired(s);
+                }
+            }
         }
 
         has_last = true;
@@ -263,6 +282,10 @@ int main(int argc, char* argv[])
     ::inet_pton(AF_INET, cfg.server_ip.c_str(), &server_addr.sin_addr);
 
     g_retrans_mgr.Init(req_sock, server_addr);
+    g_retrans_enabled = (cfg.retrans_enabled != 0);
+    g_retrans_mgr.Configure(std::chrono::milliseconds(cfg.retrans_retry_interval_ms),
+                            std::chrono::milliseconds(cfg.retrans_total_timeout_ms),
+                            static_cast<int>(cfg.retrans_max_retry_count));
 
     // ===== 3. 补包接收 socket =====
     int retrans_recv_sock = ::socket(AF_INET, SOCK_DGRAM, 0);
