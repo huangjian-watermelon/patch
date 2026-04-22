@@ -21,8 +21,6 @@ public:
 private:
     size_t capacity_ = 0;
     std::vector<TsPacket> buffer_;
-
-    size_t writeIndex_ = 0;
     size_t size_ = 0;
 
     uint64_t minSeq_ = 0;
