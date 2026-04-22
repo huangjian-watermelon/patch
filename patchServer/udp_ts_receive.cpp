@@ -1,7 +1,7 @@
 #include "udp_ts_receive.h"
-#include "ts_loss_detector.h"
 #include "ts_parsed_header.h"
 #include "stream_packet.h"
+#include "retrans_protocol.h"
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -12,8 +12,9 @@
 #include <chrono>
 
 UdpTsReceiver::UdpTsReceiver(TsRingBuffer& ring_buffer)
-    : ring_buffer_(ring_buffer)
+    : ring_buffer_(ring_buffer), session_id_(CreateSessionId())
 {
+    std::cout << "[UdpTsReceiver] session_id=" << session_id_ << std::endl;
 }
 
 UdpTsReceiver::~UdpTsReceiver()
@@ -129,6 +130,12 @@ void UdpTsReceiver::Stop()
         ::close(sockfd_);
         sockfd_ = -1;
     }
+
+    if (sendsockfd_ >= 0)
+    {
+        ::close(sendsockfd_);
+        sendsockfd_ = -1;
+    }
 }
 
 void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
@@ -150,15 +157,15 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
         }
 
         TsPacket packet;
+        packet.session_id = session_id_;
         packet.seq = global_seq_++;
         packet.recv_time_us = GetNowUs();
         std::memcpy(packet.data, data + offset, TS_PACKET_SIZE);
 
-        TsLossDetector loss_detector;
         TsParsedHeader header;
         if (ParseTsHeader(packet.data, header))
         {
-            loss_detector.OnPacket(packet.seq, header);
+            loss_detector_.OnPacket(packet.seq, header);
         }
         else
         {
@@ -168,7 +175,7 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
         static auto last_print_time = GetNowMs();
         if (GetNowMs() - last_print_time >= 10000)
         {
-            loss_detector.PrintStats();
+            loss_detector_.PrintStats();
             last_print_time = GetNowMs();
         }
 
@@ -179,7 +186,8 @@ void UdpTsReceiver::HandleUdpPacket(const uint8_t* data, size_t len)
 //            if (packet.seq % 100 == 0)
 //                continue;
             StreamPacket pkt{};
-            pkt.seq = packet.seq;
+            pkt.session_id = HostToNet64(session_id_);
+            pkt.seq = HostToNet64(packet.seq);
             std::memcpy(pkt.ts_data, packet.data, TS_PACKET_SIZE);
 
             const ssize_t sent = ::sendto(sendsockfd_,
@@ -211,4 +219,12 @@ uint64_t UdpTsReceiver::GetNowMs() const
 {
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+}
+
+uint64_t UdpTsReceiver::CreateSessionId() const
+{
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    const uint64_t tick = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+    const uint64_t pid = static_cast<uint64_t>(::getpid() & 0xFFFF);
+    return (tick << 16) ^ pid;
 }

@@ -5,22 +5,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "ts_ring_buffer.h"
-
-
-struct StreamPacket
-{
-    uint64_t seq;
-    uint8_t ts_data[188];
-};
+#include "stream_packet.h"
 
 
 class RetransServer
 {
 public:
-    explicit RetransServer(TsRingBuffer& ring_buffer);
+    explicit RetransServer(TsRingBuffer& ring_buffer, uint16_t retrans_send_port);
     ~RetransServer();
 
-    bool Init(const std::string& bind_ip, uint16_t port);
+    bool Init(const std::string& bind_ip, uint16_t port, int req_rcvbuf_bytes);
     void Run();
     void Stop();
 
@@ -33,4 +27,11 @@ private:
     int send_sockfd_ = -1;
     std::atomic<bool> running_{false};
     TsRingBuffer& ring_buffer_;
+    uint16_t retrans_send_port_ = 0;
+
+    uint64_t recv_requests_ = 0;
+    uint64_t invalid_requests_ = 0;
+    uint64_t requested_packets_ = 0;
+    uint64_t resent_packets_ = 0;
+    uint64_t miss_packets_ = 0;
 };
