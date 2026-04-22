@@ -26,6 +26,7 @@
 2. 下游机器能通过交换机加入主流组播 `stream_mcast_ip:stream_port`（默认 `238.1.1.127:5040`）。
 3. 上游机器放行 UDP `9000/9001`，确保补包请求和补包数据可达。
 4. 现在 `StreamPacket` 的 `session_id/seq` 已统一使用网络字节序发送，跨主机/跨端序系统也能正确解析。
+5. 若同时有大量客户端请求补包，可在 `retrans_service.json` 调大 `req_rcvbuf_bytes`，减少 UDP 请求排队溢出。
 
 ## patchServer 拆分说明
 

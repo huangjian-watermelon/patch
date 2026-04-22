@@ -24,6 +24,7 @@ struct RetransServiceConfig
 
     std::string req_bind_ip = "0.0.0.0";
     uint16_t req_bind_port = 9000;
+    size_t req_rcvbuf_bytes = 4 * 1024 * 1024;
     uint16_t retrans_send_port = 9001;
 
     size_t ring_capacity = 100 * 1024;
@@ -43,6 +44,7 @@ bool LoadConfig(const std::string& path, RetransServiceConfig& cfg)
     json.GetUInt16("input_mcast_port", cfg.input_mcast_port);
     json.GetString("req_bind_ip", cfg.req_bind_ip);
     json.GetUInt16("req_bind_port", cfg.req_bind_port);
+    json.GetSize("req_rcvbuf_bytes", cfg.req_rcvbuf_bytes);
     json.GetUInt16("retrans_send_port", cfg.retrans_send_port);
     json.GetSize("ring_capacity", cfg.ring_capacity);
     return true;
@@ -161,7 +163,9 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    if (!retrans_server.Init(cfg.req_bind_ip, cfg.req_bind_port))
+    if (!retrans_server.Init(cfg.req_bind_ip,
+                             cfg.req_bind_port,
+                             static_cast<int>(cfg.req_rcvbuf_bytes)))
     {
         std::cerr << "RetransServer init failed!\n";
         return 1;

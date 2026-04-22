@@ -14,7 +14,7 @@ public:
     explicit RetransServer(TsRingBuffer& ring_buffer, uint16_t retrans_send_port);
     ~RetransServer();
 
-    bool Init(const std::string& bind_ip, uint16_t port);
+    bool Init(const std::string& bind_ip, uint16_t port, int req_rcvbuf_bytes);
     void Run();
     void Stop();
 

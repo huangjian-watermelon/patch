@@ -28,7 +28,7 @@ RetransServer::~RetransServer()
     Stop();
 }
 
-bool RetransServer::Init(const std::string& bind_ip, uint16_t port)
+bool RetransServer::Init(const std::string& bind_ip, uint16_t port, int req_rcvbuf_bytes)
 {
     sockfd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd_ < 0)
@@ -44,6 +44,16 @@ bool RetransServer::Init(const std::string& bind_ip, uint16_t port)
         std::cerr << "[RetransServer] setsockopt SO_REUSEADDR failed: "
                   << std::strerror(errno) << std::endl;
         return false;
+    }
+
+    if (req_rcvbuf_bytes > 0)
+    {
+        if (::setsockopt(sockfd_, SOL_SOCKET, SO_RCVBUF, &req_rcvbuf_bytes, sizeof(req_rcvbuf_bytes)) < 0)
+        {
+            std::cerr << "[RetransServer] setsockopt SO_RCVBUF failed: "
+                      << std::strerror(errno) << std::endl;
+            return false;
+        }
     }
 
     sockaddr_in addr {};
@@ -73,6 +83,13 @@ bool RetransServer::Init(const std::string& bind_ip, uint16_t port)
 
     std::cout << "[RetransServer] bind ok: "
               << bind_ip << ":" << port << std::endl;
+
+    int actual_rcvbuf = 0;
+    socklen_t actual_rcvbuf_len = sizeof(actual_rcvbuf);
+    if (::getsockopt(sockfd_, SOL_SOCKET, SO_RCVBUF, &actual_rcvbuf, &actual_rcvbuf_len) == 0)
+    {
+        std::cout << "[RetransServer] req socket rcvbuf=" << actual_rcvbuf << std::endl;
+    }
 
     // ====== add: send sock (9001 send patch_packet) ======
     send_sockfd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
