@@ -1,9 +1,0 @@
-{
-  "input_mcast_ip": "238.1.1.127",
-  "input_mcast_port": 5040,
-  "req_bind_ip": "0.0.0.0",
-  "req_bind_port": 9000,
-  "req_rcvbuf_bytes": 4194304,
-  "retrans_send_port": 9001,
-  "ring_capacity": 102400
-}
