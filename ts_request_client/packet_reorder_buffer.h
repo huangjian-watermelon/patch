@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "recv_stream.h"
 #include "ts_output_sender.h"
@@ -29,8 +30,16 @@ public:
     void SetSender(TsOutputSender* sender);
 
 private:
-    void DeliverAvailableLocked();
-    void DeliverPacketLocked(const StreamPacket& pkt);
+    struct PendingDelivery
+    {
+        StreamPacket packet{};
+        uint64_t delivery_count = 0;
+        uint64_t first_seq = 0;
+        bool should_log = false;
+    };
+
+    std::vector<PendingDelivery> CollectDeliverablePacketsLocked();
+    void DeliverPackets(const std::vector<PendingDelivery>& packets);
 
 private:
     mutable std::mutex mutex_;
