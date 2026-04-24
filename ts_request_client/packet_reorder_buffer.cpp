@@ -52,87 +52,104 @@ bool PacketReorderBuffer::InitDeliver(const std::string& ip, uint16_t port)
 
 void PacketReorderBuffer::OnPacket(const StreamPacket& pkt)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<PendingDelivery> ready_packets;
 
-    ++recv_total_;
-
-    if (initialized_ && expected_seq_ > pkt.seq &&
-        (expected_seq_ - pkt.seq) > kSeqResetThreshold)
     {
-        std::cout << "[ReorderBuffer] detect seq reset/restart, expected_seq="
-                  << expected_seq_ << " new_seq=" << pkt.seq << std::endl;
+        std::lock_guard<std::mutex> lock(mutex_);
 
-        buffer_.clear();
-        expired_seqs_.clear();
-        expected_seq_ = pkt.seq;
-        ++restart_resync_;
+        ++recv_total_;
+
+        if (initialized_ && expected_seq_ > pkt.seq &&
+            (expected_seq_ - pkt.seq) > kSeqResetThreshold)
+        {
+            std::cout << "[ReorderBuffer] detect seq reset/restart, expected_seq="
+                      << expected_seq_ << " new_seq=" << pkt.seq << std::endl;
+
+            buffer_.clear();
+            expired_seqs_.clear();
+            expected_seq_ = pkt.seq;
+            ++restart_resync_;
+        }
+
+        if (!initialized_)
+        {
+            expected_seq_ = pkt.seq;
+            initialized_ = true;
+        }
+
+        if (pkt.seq < expected_seq_)
+        {
+            ++drop_old_;
+            return;
+        }
+
+        if (buffer_.find(pkt.seq) != buffer_.end())
+        {
+            ++drop_duplicate_;
+            return;
+        }
+
+        buffer_.emplace(pkt.seq, pkt);
+
+        if (buffer_.size() > MAX_BUFFER_SIZE)
+        {
+            std::cout << "[ReorderBuffer] buffer overflow, force skip seq = "
+                      << expected_seq_ << std::endl;
+
+            uint64_t skip_seq = expected_seq_;
+            expired_seqs_.insert(skip_seq);
+        }
+
+        ready_packets = CollectDeliverablePacketsLocked();
     }
 
-    if (!initialized_)
-    {
-        expected_seq_ = pkt.seq;
-        initialized_ = true;
-    }
-
-    if (pkt.seq < expected_seq_)
-    {
-        ++drop_old_;
-        return;
-    }
-
-    if (buffer_.find(pkt.seq) != buffer_.end())
-    {
-        ++drop_duplicate_;
-        return;
-    }
-
-    buffer_.emplace(pkt.seq, pkt);
-
-    if (buffer_.size() > MAX_BUFFER_SIZE)
-    {
-        std::cout << "[ReorderBuffer] buffer overflow, force skip seq = "
-                  << expected_seq_ << std::endl;
-
-        uint64_t skip_seq = expected_seq_;
-        expired_seqs_.insert(skip_seq);
-    }
-
-    DeliverAvailableLocked();
+    DeliverPackets(ready_packets);
 }
 
 void PacketReorderBuffer::MarkSeqExpired(uint64_t seq)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<PendingDelivery> ready_packets;
 
-    if (seq < expected_seq_)
     {
-        return;
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (seq < expected_seq_)
+        {
+            return;
+        }
+
+        expired_seqs_.insert(seq);
+        ready_packets = CollectDeliverablePacketsLocked();
     }
 
-    expired_seqs_.insert(seq);
-    DeliverAvailableLocked();
+    DeliverPackets(ready_packets);
 }
 
 void PacketReorderBuffer::ResetForNewSession(uint64_t session_id, uint64_t first_seq)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    current_session_id_ = session_id;
-    buffer_.clear();
-    expired_seqs_.clear();
-    initialized_ = true;
-    expected_seq_ = first_seq;
-    ++restart_resync_;
-    delivered_count_log_ = 0;
-    first_seq_log_ = 0;
-    first_packet_seen_ = false;
+    TsOutputSender* sender = nullptr;
 
-    if (sender_)
     {
-        sender_->ResetForNewSession();
+        std::lock_guard<std::mutex> lock(mutex_);
+        current_session_id_ = session_id;
+        buffer_.clear();
+        expired_seqs_.clear();
+        initialized_ = true;
+        expected_seq_ = first_seq;
+        ++restart_resync_;
+        delivered_count_log_ = 0;
+        first_seq_log_ = 0;
+        first_packet_seen_ = false;
+        sender = sender_;
     }
 
-    std::cout << "[ReorderBuffer] switch session_id=" << current_session_id_
-              << " reset expected_seq=" << expected_seq_ << std::endl;
+    if (sender)
+    {
+        sender->ResetForNewSession();
+    }
+
+    std::cout << "[ReorderBuffer] switch session_id=" << session_id
+              << " reset expected_seq=" << first_seq << std::endl;
 }
 
 void PacketReorderBuffer::PrintStats() const
@@ -156,18 +173,33 @@ void PacketReorderBuffer::SetSender(TsOutputSender* sender)
     sender_ = sender;
 }
 
-void PacketReorderBuffer::DeliverAvailableLocked()
+std::vector<PacketReorderBuffer::PendingDelivery> PacketReorderBuffer::CollectDeliverablePacketsLocked()
 {
+    std::vector<PendingDelivery> ready_packets;
+
     while (true)
     {
         auto it = buffer_.find(expected_seq_);
         if (it != buffer_.end())
         {
-            DeliverPacketLocked(it->second);
-            buffer_.erase(it);
+            if (!first_packet_seen_)
+            {
+                first_seq_log_ = it->second.seq;
+                first_packet_seen_ = true;
+            }
 
-            ++expected_seq_;
+            ++delivered_count_log_;
             ++delivered_total_;
+
+            PendingDelivery delivery;
+            delivery.packet = it->second;
+            delivery.delivery_count = delivered_count_log_;
+            delivery.first_seq = first_seq_log_;
+            delivery.should_log = (delivered_count_log_ % 500) == 0;
+            ready_packets.push_back(delivery);
+
+            buffer_.erase(it);
+            ++expected_seq_;
             continue;
         }
 
@@ -181,26 +213,32 @@ void PacketReorderBuffer::DeliverAvailableLocked()
         }
         break;
     }
+
+    return ready_packets;
 }
 
-void PacketReorderBuffer::DeliverPacketLocked(const StreamPacket& pkt)
+void PacketReorderBuffer::DeliverPackets(const std::vector<PendingDelivery>& packets)
 {
-    if (!first_packet_seen_)
+    TsOutputSender* sender = nullptr;
+
     {
-        first_seq_log_ = pkt.seq;
-        first_packet_seen_ = true;
-    }
-    ++delivered_count_log_;
-    if ((delivered_count_log_ % 500) == 0)
-    {
-        std::cout << "[DELIVER] count = " << delivered_count_log_
-                  << "  first_seq = " << first_seq_log_
-                  << "  current_seq = " << pkt.seq
-                  << "\n";
+        std::lock_guard<std::mutex> lock(mutex_);
+        sender = sender_;
     }
 
-    if (sender_)
+    for (const auto& item : packets)
     {
-        sender_->PushTs(pkt.ts_data);
+        if (item.should_log)
+        {
+            std::cout << "[DELIVER] count = " << item.delivery_count
+                      << "  first_seq = " << item.first_seq
+                      << "  current_seq = " << item.packet.seq
+                      << "\n";
+        }
+
+        if (sender)
+        {
+            sender->PushTs(item.packet.ts_data);
+        }
     }
 }
