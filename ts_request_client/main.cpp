@@ -21,6 +21,8 @@ using namespace std;
 
 namespace
 {
+constexpr auto kIgnoredSessionLogInterval = std::chrono::seconds(1);
+
 struct ClientConfig
 {
     std::string stream_mcast_ip = "238.1.1.127";
@@ -34,6 +36,7 @@ struct ClientConfig
     uint16_t retrans_retry_interval_ms = 10;
     uint16_t retrans_total_timeout_ms = 30;
     uint16_t retrans_max_retry_count = 1;
+    uint16_t session_switch_grace_ms = 1000;
 };
 
 bool LoadConfig(const std::string& path, ClientConfig& cfg)
@@ -57,6 +60,7 @@ bool LoadConfig(const std::string& path, ClientConfig& cfg)
     json.GetUInt16("retrans_retry_interval_ms", cfg.retrans_retry_interval_ms);
     json.GetUInt16("retrans_total_timeout_ms", cfg.retrans_total_timeout_ms);
     json.GetUInt16("retrans_max_retry_count", cfg.retrans_max_retry_count);
+    json.GetUInt16("session_switch_grace_ms", cfg.session_switch_grace_ms);
 
     return true;
 }
@@ -67,11 +71,16 @@ static RetransRequestManager g_retrans_mgr;
 static std::atomic<bool> g_running{true};
 static std::atomic<uint64_t> g_current_session_id{0};
 static bool g_retrans_enabled = true;
+static std::chrono::milliseconds g_session_switch_grace{1000};
 
-void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_addr)
+void MainStreamLoop(int stream_sock)
 {
     uint64_t last_seq = 0;
     bool has_last = false;
+    auto last_current_packet_time = std::chrono::steady_clock::now();
+    auto last_ignored_session_log_time = std::chrono::steady_clock::time_point{};
+    uint64_t ignored_session_id = 0;
+    uint64_t ignored_session_packets = 0;
 
     StreamPacket pkt{};
 
@@ -101,7 +110,36 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
         uint64_t seq = host_pkt.seq;
         const uint64_t pkt_session_id = host_pkt.session_id;
 
+        const auto now = std::chrono::steady_clock::now();
         const uint64_t current_session_id = g_current_session_id.load(std::memory_order_relaxed);
+        if (current_session_id != 0 && pkt_session_id != current_session_id)
+        {
+            const auto current_idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - last_current_packet_time);
+            if (current_idle_time < g_session_switch_grace)
+            {
+                if (ignored_session_id != pkt_session_id)
+                {
+                    ignored_session_id = pkt_session_id;
+                    ignored_session_packets = 0;
+                    last_ignored_session_log_time = std::chrono::steady_clock::time_point{};
+                }
+
+                ++ignored_session_packets;
+                if (last_ignored_session_log_time == std::chrono::steady_clock::time_point{} ||
+                    now - last_ignored_session_log_time >= kIgnoredSessionLogInterval)
+                {
+                    std::cout << "[main stream] ignore session_id " << pkt_session_id
+                              << " while current session_id is " << current_session_id
+                              << " (ignored packets=" << ignored_session_packets
+                              << ", current idle=" << current_idle_time.count() << "ms)"
+                              << std::endl;
+                    last_ignored_session_log_time = now;
+                }
+                continue;
+            }
+        }
+
         if (current_session_id == 0 || pkt_session_id != current_session_id)
         {
             std::cout << "[main stream] switch session_id from " << current_session_id
@@ -111,7 +149,12 @@ void MainStreamLoop(int stream_sock, int req_sock, const sockaddr_in& server_add
             g_retrans_mgr.OnSessionChanged(pkt_session_id);
             g_reorder_buffer.ResetForNewSession(pkt_session_id, host_pkt.seq);
             has_last = false;
+            ignored_session_id = 0;
+            ignored_session_packets = 0;
+            last_ignored_session_log_time = std::chrono::steady_clock::time_point{};
         }
+
+        last_current_packet_time = now;
 
         if (has_last && seq > last_seq + 1)
         {
@@ -283,6 +326,7 @@ int main(int argc, char* argv[])
 
     g_retrans_mgr.Init(req_sock, server_addr);
     g_retrans_enabled = (cfg.retrans_enabled != 0);
+    g_session_switch_grace = std::chrono::milliseconds(cfg.session_switch_grace_ms);
     g_retrans_mgr.Configure(std::chrono::milliseconds(cfg.retrans_retry_interval_ms),
                             std::chrono::milliseconds(cfg.retrans_total_timeout_ms),
                             static_cast<int>(cfg.retrans_max_retry_count));
@@ -319,7 +363,7 @@ int main(int argc, char* argv[])
 
     g_reorder_buffer.SetSender(&output_sender);
 
-    std::thread t1(MainStreamLoop, stream_sock, req_sock, server_addr);
+    std::thread t1(MainStreamLoop, stream_sock);
     std::thread t2(RetransRecvLoop, retrans_recv_sock);
     std::thread t3(StatLoop);
     std::thread t4(RetransTimeoutLoop);
